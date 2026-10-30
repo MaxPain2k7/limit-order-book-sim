@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "lob-sim"
+version = "1.0.0"
+description = "Limit order book matching engine and agent-based market simulator for market making research"
+requires-python = ">=3.10"
+dependencies = ["sortedcontainers>=2.4"]
+
+[project.optional-dependencies]
+dev = ["pytest>=7", "hypothesis>=6", "matplotlib>=3.8"]
+real = ["hftbacktest>=2.4,<3; python_version >= '3.11'", "pandas>=2", "numpy>=1.26", "scipy>=1.10"]
+
+[tool.pytest.ini_options]
+testpaths = ["."]
+python_files = "test_*.py"
+
+[tool.setuptools]
+packages = ["lobsim", "stage6"]
