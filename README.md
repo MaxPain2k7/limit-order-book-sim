@@ -16,11 +16,13 @@ inventory risk and adverse selection? And what does it take to keep it?
 - Leaning the quotes on recent trade flow (stage 5) looked great in the sim.
   On 30 holdout seeds it beat plain AS in all 12 test conditions.
 - On 12 real days of Binance SOLUSDT it fell apart. Order flow predicts about
-  one second ahead and explains around 0.1% of that move. The flow bot was
-  significantly worse than plain AS on every holdout day and no bot had a
-  positive edge even before fees. My simulator made order flow far more
-  predictive than a real market is.
-- At retail fees none of the tight spread bots make money, sim or real.
+  one second ahead and explains around 0.1% of that move. At a tight spread
+  the flow bot was significantly worse than plain AS on every holdout day.
+  No bot had a positive edge even before fees, at any spread from 1 to 8
+  ticks. My simulator made order flow far more predictive than a real market
+  is.
+- At retail fees none of the tight spread bots make money in the sim and
+  nothing makes money on the real data.
 
 ## Running it
 
@@ -343,7 +345,7 @@ python stage6/flow_check.py --symbol SOLUSDT                                    
 python stage6/download.py --symbol SOLUSDT --months 2025-01 2025-12                  # + L2 books, ~2.7 GB
 python stage6/convert.py --symbol SOLUSDT
 python stage6/flow_check.py --symbol SOLUSDT --npz                                   # the proper check
-python stage6/run.py --symbol SOLUSDT --quick                                        # the bots, train/holdout
+python stage6/run.py --symbol SOLUSDT                                                # the bots, train/holdout (--quick for a small grid)
 ```
 
 BTCUSDT book files are gigabytes per day, so start with something smaller.
@@ -437,9 +439,13 @@ nothing at ten, so most of it was the proxy's bias.
 
 ### The bots on real data
 
-`run.py --quick`: train January to June, hold out July to December. 10ms
-order latency, 100ms quoting interval, 1 SOL per order, cap 30, hftbacktest's
-power law queue model. Holdout, mean per day, in USDT:
+Train January to June, hold out July to December. 10ms order latency, 100ms
+quoting interval, 1 SOL per order, cap 30, hftbacktest's power law queue
+model. I ran it twice: first with the small `--quick` grid (half spreads 1 to
+3 ticks), then the full grid (half spreads up to 8, five γ values, five flow
+coefficients). Holdout, mean per day, in USDT.
+
+Quick grid:
 
 | bot (picked on training days) | gross pnl | edge, bp of notional | spread | inventory | fills | net at 2bp maker fee |
 |---|---|---|---|---|---|---|
@@ -448,36 +454,50 @@ power law queue model. Holdout, mean per day, in USDT:
 | flow, AS + coefficient 2 | -191.0 | -0.94 | -60.7 | -130.3 | 11,482 | -596.9 |
 
 Paired by day, AS minus naive is zero (t 0.0, AS better on 3 of 6). Flow
-minus AS is -59 a day, t -5.1, worse on all 6 days, Holm p 0.008. Every
-training config lost money too, before fees and even with the top tier
-rebate.
+minus AS is -59 a day, t -5.1, worse on all 6 days, Holm p 0.008.
+
+Every family picked the widest option, so the full grid:
+
+| bot (picked on training days) | gross pnl | edge, bp of notional | spread | inventory | fills | net at -0.5bp rebate | net at 2bp maker fee |
+|---|---|---|---|---|---|---|---|
+| naive, hs 8 ticks | -38.7 | -6.92 | 3.1 | -41.8 | 302 | -37.8 | -51.8 |
+| AS, hs 5, γ 0.001 | -13.2 | -0.45 | 0.7 | -14.0 | 1,613 | +0.5 | -72.5 |
+| flow, AS + coefficient 1 | -19.3 | -0.67 | 0.0 | -19.2 | 1,587 | -6.2 | -78.0 |
+
+Paired by day, AS minus naive is +25 a day (t 0.46, better on 5 of 6) and
+flow minus AS is -6 (t -0.48, 3 of 6). Neither is significant. Every config
+in both grids lost money on the training days too, before fees.
 
 What I take from it:
 
-- The stage 5 flow lean doesn't transfer, it actively hurts. In the sim it
-  worked because informed flow predicted the next 20 steps. On SOLUSDT the
-  predictive part lasts about a second, while flow and price move together
-  strongly *within* the window (+0.43 at 1s). By the time the bot leans the
-  move already happened, so it buys after buying and sells after selling. It
-  got 43% more fills than AS at worse prices and lost on both spread and
-  inventory.
-- AS skew neither helps nor hurts here. Its sim advantage came mostly from
-  trending tapes and six days can't really test that.
-- None of these bots has an edge on this market. Gross edge is -0.9 to
-  -1.5bp per unit traded while a maker needs about +2bp just to cover the base
-  fee. Quoting a few ticks back from a book that's usually one tick wide
-  means you mostly get filled when price runs through you, which is adverse
-  selection by definition.
-- Caveats: only six holdout days. The quick grid only tried half spreads of 1
-  to 3 ticks and every family picked 3, so the full grid (up to 8) might find
-  something less bad. I doubt it finds something positive. Plus no market
-  impact and constant latency in the replay.
+- The stage 5 flow lean doesn't transfer. At a tight spread it actively hurts
+  (t -5.1). In the sim it worked because informed flow predicted the next 20
+  steps. On SOLUSDT the predictive part lasts about a second, while flow and
+  price move together strongly *within* the window (+0.43 at 1s). By the time
+  the bot leans the move already happened, so it buys after buying and sells
+  after selling. In the quick grid it got 43% more fills than AS at worse
+  prices. Given the full grid, training picked the smallest coefficient on
+  offer (the data saying "lean as little as possible") and it still came
+  out slightly behind plain AS.
+- Quoting wider loses a lot less, mostly because it trades a lot less. AS at
+  5 ticks loses 13 a day instead of 132. But gross edge is still negative for
+  every bot (-0.45bp at best) while a maker needs about +2bp to cover the
+  base fee. Only with a top tier rebate does AS get to roughly zero (+0.5 a
+  day). Quoting back from a book that's usually one tick wide means you mostly
+  get filled when price runs through you, which is adverse selection by
+  definition.
+- AS skew looks better than naive at the wider spreads (5 of 6 days) but six
+  days isn't enough to call it. Its sim advantage came mostly from trending
+  tapes and these days don't test that much.
+- Caveats: six holdout days, no market impact and constant latency in the
+  replay.
 
 So overall, the sim said inventory skew controls risk and leaning on flow
 adds edge. The real data agrees that flow persists and moves price but not
 that it predicts far enough ahead to trade on. A simple quoting model at
-retail latency and fees doesn't make money on a liquid crypto future, which
-is what I'd expect in hindsight. Knowing exactly why was the point.
+retail latency and fees doesn't make money on a liquid crypto future, at any
+spread I tried. That's what I'd expect in hindsight. Knowing exactly why was
+the point.
 
 ## Pitfalls I checked
 
