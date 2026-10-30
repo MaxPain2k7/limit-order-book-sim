@@ -33,11 +33,11 @@ git init
 git add .
 git commit -m "lob-sim: order book engine and market making research"
 git branch -M main
-git remote add origin https://github.com/MaxPain2k7/lob-sim.git
+git remote add origin https://github.com/MaxPain2k7/limit-order-book-sim.git
 git push -u origin main
 ```
 
-Create the empty `lob-sim` repo on github.com first. Downloaded data in
+Create the empty `limit-order-book-sim` repo on github.com first. Downloaded data in
 `data/` is ignored by git, so it will not be pushed.
 
 ## What is where
